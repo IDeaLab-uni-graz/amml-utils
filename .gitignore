@@ -1,3 +1,7 @@
+# Data folder
+amml_utils/data/*
+!amml_utils/data/.gitkeep
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
