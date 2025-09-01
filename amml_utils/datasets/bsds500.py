@@ -99,7 +99,7 @@ class CustomDataset(torch.utils.data.Dataset):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        return _read_image(self.image_paths[idx])[None, ...]
+        return _read_image(self.image_paths[idx])
 
 
 class BSDS500DataLoader(BaseDataLoader):
