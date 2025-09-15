@@ -9,10 +9,6 @@ from amml_utils.registry import register_dataset
 DATASET_NAME = "BSDS500"
 
 
-def _read_image(impath):
-    return torch.from_numpy(imageio.imread(impath))
-
-
 def standard_transform(image):
     image = (image / 255.0).mean(-1, keepdims=True).permute(2, 0, 1)
     if image.shape[1] == 481:
@@ -21,10 +17,6 @@ def standard_transform(image):
 
 
 def download_dataset(data_path):
-    """
-    If the dataset is already on NextCloud, this step can be skipped.
-    Otherwise, the dataset should be downloaded from some online source.
-    """
     import requests
     r = requests.get("https://github.com/BIDS/BSDS500/archive/master.zip")
     filename = os.path.join(data_path, "BSDS500.zip")
@@ -43,10 +35,10 @@ class CustomDataset(torch.utils.data.Dataset):
 
     Parameters
     ----------
-    base_path
-        Base path to the location where the dataset is stored.
-        Important: This is assumed to be the path including the name of the dataset,
-        for instance `/opt/project/data/EXAMPLE/
+    data_path
+        Path to the location where the dataset is stored.
+        Important: This is assumed to be the path without the name of the dataset,
+        for instance `/opt/project/data/
     subset
         Either "full", "train", "test" or "val".
     """
@@ -70,7 +62,7 @@ class CustomDataset(torch.utils.data.Dataset):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        image = _read_image(self.image_paths[idx])
+        image = torch.from_numpy(imageio.imread(self.image_paths[idx]))
         if self.transform:
             image = self.transform(image)
         return image

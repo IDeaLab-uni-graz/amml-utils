@@ -1,6 +1,8 @@
 import os
 
-# Registry mapping IDs to loader classes
+from amml_utils.utils import download_from_nextcloud
+
+
 _DATASET_REGISTRY = {}
 
 DATA_DIRECTORY_ENV_VAR = "BASE_DIRECTORY"
@@ -28,7 +30,10 @@ def get_dataset(dataset_name, data_path=None, subset="full", **kwargs):
             data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data")
 
     if dataset_name not in os.listdir(data_path):
-        download_function(data_path=data_path)
+        if download_function is None:
+            download_from_nextcloud(dataset_name, data_path)
+        else:
+            download_function(data_path=data_path)
     return dataset(data_path, subset, **kwargs)
 
 

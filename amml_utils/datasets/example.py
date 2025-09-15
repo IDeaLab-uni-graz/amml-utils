@@ -1,18 +1,12 @@
-from functools import partial
 import imageio.v3 as imageio
 import os
 import pathlib
 import torch
 
 from amml_utils.registry import register_dataset
-from amml_utils.utils import download_from_nextcloud
 
 
 DATASET_NAME = "EXAMPLE"
-
-
-def _read_image(impath):
-    return torch.from_numpy(imageio.imread(impath))
 
 
 def standard_transform(image):
@@ -29,8 +23,8 @@ class CustomDataset(torch.utils.data.Dataset):
 
     Parameters
     ----------
-    base_path
-        Base path to the location where the dataset is stored.
+    data_path
+        Path to the location where the dataset is stored.
         Important: This is assumed to be the path without the name of the dataset,
         for instance `/opt/project/data/
     subset
@@ -56,10 +50,10 @@ class CustomDataset(torch.utils.data.Dataset):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        image = _read_image(self.image_paths[idx])
+        image = torch.from_numpy(imageio.imread(self.image_paths[idx]))
         if self.transform:
             image = self.transform(image)
         return image
 
 
-register_dataset(DATASET_NAME, partial(download_from_nextcloud, dataset_name=DATASET_NAME), CustomDataset)
+register_dataset(DATASET_NAME, None, CustomDataset)
