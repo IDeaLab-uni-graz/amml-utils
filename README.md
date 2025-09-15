@@ -17,6 +17,29 @@ a dataset, it is first checked if the dataset is already available. This avoids 
 
 See also [test.py](amml_utils/test.py) for an example on how to work with the datasets.
 
+<details>
+<summary>Tips for running <b>test.py</b>!</summary>
+
+---
+For running [test.py](amml_utils/test.py) you can use the light-weight [amml-python-base](https://github.com/IDeaLab-uni-graz/amml-python-base) slim shell:
+```shell
+docker run -it -v $(pwd):/opt/build/src sceptri/amml-python-base-cpu-slim:latest bash
+```
+Now you can change it to the `src` directory, which contains `amml-utils`, and install it with Pip:
+```shell
+cd src/ && pip install -e .
+```
+Last, but not least, you can copy the full `.env` (for example from another project) to the `amml-utils` directory and source it in the Docker shell:
+```shell
+set -a && source .env && set +a
+```
+Finally, you can run the test file:
+```shell
+python amml_utils/test.py
+```
+---
+</details>
+
 #### List all available datasets
 
 To get a list of all datasets currently available, run:
