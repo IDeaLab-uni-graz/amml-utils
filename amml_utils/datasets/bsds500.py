@@ -3,8 +3,7 @@ import os
 import pathlib
 import torch
 
-from amml_utils.base_data_loader import BaseDataLoader
-from amml_utils.registry import register_data_loader
+from amml_utils.registry import register_dataset
 
 
 DATASET_NAME = "BSDS500"
@@ -13,7 +12,7 @@ DATASET_NAME = "BSDS500"
 def _read_image(impath):
     return torch.from_numpy(imageio.imread(impath))
 
-    
+
 def standard_transform(image):
     image = (image / 255.0).mean(-1, keepdims=True).permute(2, 0, 1)
     if image.shape[1] == 481:
@@ -48,14 +47,14 @@ class CustomDataset(torch.utils.data.Dataset):
         Base path to the location where the dataset is stored.
         Important: This is assumed to be the path including the name of the dataset,
         for instance `/opt/project/data/EXAMPLE/
-    data_type
+    subset
         Either "full", "train", "test" or "val".
     """
-    def __init__(self, data_path, data_type, transform=standard_transform):
-        if data_type == "full":
+    def __init__(self, data_path, subset, transform=standard_transform):
+        if subset == "full":
             folder_names = ["train", "test", "val"]
         else:
-            folder_names = [data_type]
+            folder_names = [subset]
         self.image_paths = []
 
         for name in folder_names:
@@ -64,7 +63,7 @@ class CustomDataset(torch.utils.data.Dataset):
                 if not impath.as_uri().endswith("jpg"):
                     continue
                 self.image_paths.append(impath)
-                
+
         self.transform = transform
 
     def __len__(self):
@@ -77,20 +76,4 @@ class CustomDataset(torch.utils.data.Dataset):
         return image
 
 
-class BSDS500DataLoader(BaseDataLoader):
-    dataset_name = DATASET_NAME
-
-    def __init__(self, data_path, transform=standard_transform):
-        super().__init__(data_path, transform=transform)
-
-    def _get_dataset_as_tensor(self, data_type="full"):
-        return self._get_dataset(data_type=data_type)[...]
-
-    def _get_dataset(self, data_type="full"):
-        return CustomDataset(self.data_path, data_type, transform=self.transform)
-
-    def _download_dataset(self):
-        download_dataset(self.data_path)
-
-
-register_data_loader(DATASET_NAME, BSDS500DataLoader)
+register_dataset(DATASET_NAME, download_dataset, CustomDataset)
