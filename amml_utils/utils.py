@@ -30,11 +30,9 @@ def download_from_nextcloud(dataset_name, data_path):
     nc_dataset_directory = os.path.join(os.getenv("DATASETS_DIRECTORY"), dataset_name)
 
     nc = nextcloud_login()
-
-    print(f"Downloading files for dataset '{dataset_name}'...")
+    
     zip_path = nc.files.download_directory_as_zip(nc_dataset_directory, tmp_path)
 
-    print(f"Extracting files for dataset '{dataset_name}'...")
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(data_path)
 

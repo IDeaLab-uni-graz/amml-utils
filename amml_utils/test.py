@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 from amml_utils import get_dataset, list_datasets
 
 
-TEST_DATASET = "EXAMPLE"
+TEST_DATASET = "BSDS500"
 
 print(f"Available datasets: {list_datasets()}")
 
