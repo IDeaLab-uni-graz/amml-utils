@@ -5,8 +5,9 @@ from pathlib import Path
 
 class BaseDataLoader(ABC):
     """Abstract base class for dataset loaders."""
-    def __init__(self, data_path: Path):
+    def __init__(self, data_path: Path, transform=None):
         self.data_path = data_path
+        self.transform = transform
 
     def dataset_available(self):
         if self.dataset_name in os.listdir(self.data_path):
