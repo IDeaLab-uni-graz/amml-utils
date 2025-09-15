@@ -24,17 +24,17 @@ def get_dataset(dataset_name, data_path=None, subset="full", **kwargs):
 
     if data_path is None:
         if DATA_DIRECTORY_ENV_VAR in os.environ:
-            data_path = os.getenv(DATA_DIRECTORY_ENV_VAR) + '/data'
+            data_path = os.path.join(os.getenv(DATA_DIRECTORY_ENV_VAR), "data")
         else:
             print(f"\033[1mWarning:\033[0m Environment variable '{DATA_DIRECTORY_ENV_VAR}' not set and no data path provided! Using default data path now, which is: " + os.path.join(os.path.dirname(os.path.realpath(__file__)), "data"))
             data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data")
 
     if dataset_name not in os.listdir(data_path):
         if download_function is None:
-            print(f"Downloading files for dataset '{dataset_name}' from nextcloud...")    
+            print(f"Downloading files for dataset '{dataset_name}' from nextcloud ...")
             download_from_nextcloud(dataset_name, data_path)
         else:
-            print(f"Downloading files for dataset '{dataset_name}' via downloadfunction ...")    
+            print(f"Downloading files for dataset '{dataset_name}' via download function ...")
             download_function(data_path=data_path)
     return dataset(data_path, subset, **kwargs)
 
