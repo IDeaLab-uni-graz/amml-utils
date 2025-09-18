@@ -21,22 +21,25 @@ See also [test.py](amml_utils/test.py) for an example on how to work with the da
 <summary>Tips for running <b>test.py</b>!</summary>
 
 ---
-It is assumed you are in the base folder of your local `amml-utils` repository. You can then use the light-weight [amml-python-base](https://github.com/IDeaLab-uni-graz/amml-python-base) slim shell to try out and run `amml-utils`:
+You can then use the light-weight [amml-python-base](https://github.com/IDeaLab-uni-graz/amml-python-base) slim shell to try out and run `amml-utils`:
 ```shell
 docker run -it -v $(pwd):/opt/build/src sceptri/amml-python-base-cpu-slim:latest bash
 ```
-Now change into the `src` directory, which contains `amml-utils`, and install it (as an editable package) with Pip:
-```shell
-cd src/ && pip install -e .
-```
-Last, but not least, you can copy the full `.env` (for example from another project) to the `amml-utils` directory and source it in the Docker shell:
+The `amml_utils` package is a part of the (even slim version of) `amml-python-base`. As such, you can copy the full `.env` (for example from another project) to your current directory and source it in the Docker shell:
 ```shell
 set -a && source .env && set +a
 ```
-Finally, run the test file:
+Then just run the test file:
 ```shell
 python amml_utils/test.py
 ```
+
+Moreover, if you wish to test the local version you can achieve it by `cd`-ing into the `amml-utils` local repository folder and running the Docker command. Then one can `cd` into the `src` directory in the Docker shell, which contains `amml-utils` package source folder, and install it (as an editable package) with Pip:
+```shell
+cd src/ && pip install -e .
+```
+Having `.env` copied into the local base repository directory, you can follow the guide above on sourcing the environment file and running the test script.
+
 ---
 </details>
 
