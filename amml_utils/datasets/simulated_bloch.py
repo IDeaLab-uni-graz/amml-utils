@@ -53,11 +53,8 @@ class CustomDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         data_csv = pd.read_csv(self.data_paths[idx])
         trajectory = data_csv.to_numpy()
-        print("in getitem")
-        print(type(trajectory))
         if self.transform:
             trajectory= self.transform(trajectory)
-        print(type(trajectory))
         return trajectory
 
 
