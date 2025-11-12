@@ -2,30 +2,20 @@ import imageio.v3 as imageio
 import os
 import pathlib
 import torch
+from torchvision.transforms import RandomCrop
 
 from amml_utils.registry import register_dataset
 
 
-DATASET_NAME = "BSDS500"
+DATASET_NAME = "IMAGENET_SMALL"
+
+STANDARD_WIDTH = 256
+STANDARD_HEIGHT = 256
 
 
 def standard_transform(image):
-    image = (image / 255.0).mean(-1, keepdims=True).permute(2, 0, 1)
-    if image.shape[1] == 481:
-        image = torch.rot90(image, 1, (-2, -1))
-    return image
-
-
-def download_dataset(data_path):
-    import requests
-    r = requests.get("https://github.com/BIDS/BSDS500/archive/master.zip")
-    filename = os.path.join(data_path, "BSDS500.zip")
-    with open(filename, "wb") as fd:
-        fd.write(r.content)
-    import zipfile
-    with zipfile.ZipFile(filename, "r") as zip_ref:
-        zip_ref.extractall(os.path.join(data_path, DATASET_NAME))
-    os.remove(filename)
+    image = image.mean(-1, dtype=float)
+    return RandomCrop((STANDARD_HEIGHT, STANDARD_WIDTH)).forward(image)
 
 
 class CustomDataset(torch.utils.data.Dataset):
@@ -50,10 +40,8 @@ class CustomDataset(torch.utils.data.Dataset):
         self.image_paths = []
 
         for name in folder_names:
-            path = pathlib.Path(os.path.join(data_path, DATASET_NAME, "BSDS500-master/BSDS500/data/images", name))
+            path = pathlib.Path(os.path.join(data_path, DATASET_NAME, name))
             for impath in path.iterdir():
-                if not impath.as_uri().endswith("jpg"):
-                    continue
                 self.image_paths.append(impath)
 
         self.transform = transform
@@ -68,4 +56,4 @@ class CustomDataset(torch.utils.data.Dataset):
         return image
 
 
-register_dataset(DATASET_NAME, download_dataset, CustomDataset)
+register_dataset(DATASET_NAME, None, CustomDataset)
