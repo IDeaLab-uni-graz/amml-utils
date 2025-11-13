@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import os
 import pathlib
 import torch
@@ -15,7 +16,6 @@ DATASET_NAME = "Simulated_Bloch"
 
 def standard_transform(trajectory):
     return trajectory
-
 
 class CustomDataset(torch.utils.data.Dataset):
     """Custom dataset that can be used for loading image data from files.
@@ -40,22 +40,26 @@ class CustomDataset(torch.utils.data.Dataset):
 
         for name in folder_names:
             path = pathlib.Path(os.path.join(data_path, DATASET_NAME, name))
-            for csv_path in path.iterdir():
-                if not csv_path.as_uri().endswith("csv"):
+            for file_path in path.iterdir():
+                print(file_path.as_uri())
+                if not file_path.as_uri().endswith(".parquet"):
                     continue
-                self.data_paths.append(csv_path)
+                self.data_paths.append(file_path)
 
         self.transform = transform
 
     def __len__(self):
         return len(self.data_paths)
 
+    # Indices of the magnetization
+    LABEL_INDICES = range(4, 7)
+
     def __getitem__(self, idx):
-        data_csv = pd.read_csv(self.data_paths[idx])
-        trajectory = data_csv.to_numpy()
+        data_df = pd.read_parquet(self.data_paths[idx])
+        datapoint = data_df.to_numpy()
         if self.transform:
-            trajectory= self.transform(trajectory)
-        return trajectory
+            datapoint= self.transform(datapoint)
+        return np.delete(datapoint, self.LABEL_INDICES, 1), datapoint[:, self.LABEL_INDICES]
 
 
 register_dataset(DATASET_NAME, None, CustomDataset)
