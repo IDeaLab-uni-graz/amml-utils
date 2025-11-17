@@ -25,20 +25,14 @@ You can then use the light-weight [amml-python-base](https://github.com/IDeaLab-
 ```shell
 docker run -it -v $(pwd):/opt/build/src sceptri/amml-python-base-cpu-slim:latest bash
 ```
-The `amml_utils` package is a part of the (even slim version of) `amml-python-base`. As such, you can copy the full `.env` (for example from another project) to your current directory and source it in the Docker shell:
-```shell
-set -a && source .env && set +a
-```
-Then just run the test file:
-```shell
-python amml_utils/test.py
+However, more convenient is to use the prepared `docker-compose.yaml` with the test service `amml-utils-test`, which collects and includes all the necessary bits and pieces to play around with amml-utils. However, do note that you need the `.env` copied into the root directory. Then, one needs to do is:
+```bash
+docker compose run --rm amml-utils-test
 ```
 
-Moreover, if you wish to test the local version you can achieve it by `cd`-ing into the `amml-utils` local repository folder and running the Docker command. Then one can `cd` into the `src` directory in the Docker shell, which contains `amml-utils` package source folder, and install it (as an editable package) with Pip:
-```shell
-cd src/ && pip install -e .
-```
-Having `.env` copied into the local base repository directory, you can follow the guide above on sourcing the environment file and running the test script.
+A big advantage of this approach is that you can configure a PyCharm Python interpreter/debugger as usual and it works. One can then run, for example, the test script `amml_utils/test.py` as much as they need and even debug it step-by-step.
+
+For more information, see `docker-compose.yaml`, which also includes one more service that does not install the current local version of the `amml-utils` Python package.
 
 ---
 </details>
