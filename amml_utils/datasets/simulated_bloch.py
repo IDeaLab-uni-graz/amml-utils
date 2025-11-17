@@ -55,7 +55,7 @@ class CustomDataset(torch.utils.data.Dataset):
     LABEL_INDICES = range(4, 7)
 
     def __getitem__(self, idx):
-        data_df = pd.read_parquet(self.data_paths[idx])
+        data_df = pd.read_parquet(self.data_paths[idx]).astype(np.float32)
         datapoint = data_df.to_numpy()
         if self.transform:
             datapoint= self.transform(datapoint)
