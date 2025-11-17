@@ -1,0 +1,35 @@
+name: "AMML Utils"
+services:
+  # Test Docker-compose service, which allows you to run
+  # docker compose run --rm amml-utils-test
+  # to get into the container shell, but also supports PyCharm Python interpreter/debugger
+  amml-utils-test:
+    image: sceptri/amml-python-base-cpu-slim:latest
+    volumes:
+      - .:/opt/project
+    network_mode: host
+    command: bash
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        cd /opt/project
+        set -a && source .env && set +a
+        pip install -e /opt/project/
+        exec "$@"
+      - "$@"
+  # An analogous service, which does NOT install the current local amml-utils version
+  amml-utils-test-published:
+    image: sceptri/amml-python-base-cpu-slim:latest
+    volumes:
+      - .:/opt/project
+    network_mode: host
+    command: bash
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        cd /opt/project
+        set -a && source .env && set +a
+        exec "$@"
+      - "$@"
