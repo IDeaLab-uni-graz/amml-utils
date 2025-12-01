@@ -41,7 +41,6 @@ class CustomDataset(torch.utils.data.Dataset):
         for name in folder_names:
             path = pathlib.Path(os.path.join(data_path, DATASET_NAME, name))
             for file_path in path.iterdir():
-                print(file_path.as_uri())
                 if not file_path.as_uri().endswith(".parquet"):
                     continue
                 self.data_paths.append(file_path)
