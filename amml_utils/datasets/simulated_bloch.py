@@ -55,11 +55,20 @@ class CustomDataset(torch.utils.data.Dataset):
     LABEL_INDICES = range(4, 7)
 
     def __getitem__(self, idx):
+        # Load the parquet file and convert data to numpy array
         data_df = pd.read_parquet(self.data_paths[idx]).astype(np.float32)
         datapoint = data_df.to_numpy()
+
+        # Apply transformation if specified
         if self.transform:
-            datapoint= self.transform(datapoint)
-        return np.delete(datapoint, self.LABEL_INDICES, 1), datapoint[:, self.LABEL_INDICES]
+            datapoint = self.transform(datapoint)
+
+            # Separate features and labels
+        features = np.delete(datapoint, self.LABEL_INDICES, axis=1)
+        labels = datapoint[:, self.LABEL_INDICES]
+
+        # Convert numpy arrays to PyTorch tensors
+        return torch.from_numpy(features), torch.from_numpy(labels)
 
 
 register_dataset(DATASET_NAME, None, CustomDataset)
