@@ -136,4 +136,4 @@ class CineMRIDataset(torch.utils.data.Dataset):
     def __repr__(self):
         return f"CineMRIDataset(root={self.root}, nfiles={len(self)})"
 
-register_dataset(DATASET_NAME, None, CineMRIDataset)
+register_dataset(DATASET_NAME, CineMRIDataset)
