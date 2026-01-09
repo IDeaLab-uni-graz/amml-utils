@@ -11,7 +11,7 @@ from amml_utils.registry import register_dataset
 
 DATASET_NAME = "RNN_Simulated_Bloch"
 DATASET_DESCRIPTION = "Simulated Bloch dataset using IntegratorRNN"
-DATASET_VERSION = "v1.0"
+DATASET_VERSION = "v1.1"
 DATASET_VERSION_FILE = "version.txt"
 
 def standard_transform(trajectory):
