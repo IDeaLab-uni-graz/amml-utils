@@ -6,21 +6,12 @@ import torch
 import sys
 
 from amml_utils.registry import register_dataset
+from amml_utils.utils import version_check
 
 DATASET_NAME = "Simulated_Bloch"
 DATASET_DESCRIPTION = "Simulated Bloch dataset using BART"
 DATASET_VERSION = "v1.1"
 DATASET_VERSION_FILE = "version.txt"
-
-
-def version_check(data_path, dataset_name, dataset_version, dataset_version_file):
-    path = os.path.join(data_path, dataset_name, dataset_version_file)
-    if os.path.isfile(path):
-        with open(path) as input_file:
-            version, last_modified = [next(input_file).replace('\n', '') for _ in range(2)]
-            return version == dataset_version, f"Expected: {dataset_version} - Got: {version} from {last_modified}"
-    else:
-        return False, f"Version file '{dataset_version_file}' not found! Expected: {dataset_version}"
 
 
 def standard_transform(trajectory):

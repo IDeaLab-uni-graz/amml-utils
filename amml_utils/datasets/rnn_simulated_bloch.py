@@ -4,7 +4,8 @@ import os
 import pathlib
 import torch
 
-from amml_utils.datasets.simulated_bloch import version_check, CustomDataset
+from amml_utils.datasets.simulated_bloch import CustomDataset
+from amml_utils.utils import version_check
 from amml_utils.registry import register_dataset
 
 # Format-equivalent version of Simulated_Bloch dataset (therefore re-uses that code)
