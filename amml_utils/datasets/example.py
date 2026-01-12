@@ -56,4 +56,4 @@ class CustomDataset(torch.utils.data.Dataset):
         return image
 
 
-register_dataset(DATASET_NAME, None, CustomDataset)
+register_dataset(DATASET_NAME, CustomDataset)

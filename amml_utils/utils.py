@@ -43,3 +43,12 @@ def download_from_nextcloud(dataset_name, data_path):
         zip_ref.extractall(data_path)
 
     os.remove(tmp_path)
+
+def version_check(data_path, dataset_name, dataset_version, dataset_version_file):
+    path = os.path.join(data_path, dataset_name, dataset_version_file)
+    if os.path.isfile(path):
+        with open(path) as input_file:
+            version, last_modified = [next(input_file).replace('\n', '') for _ in range(2)]
+            return version == dataset_version, f"Expected: {dataset_version} - Got: {version} from {last_modified}"
+    else:
+        return False, f"Version file '{dataset_version_file}' not found! Expected: {dataset_version}"

@@ -3,19 +3,20 @@ import numpy as np
 import os
 import pathlib
 import torch
+import sys
 
 from amml_utils.registry import register_dataset
-
-# Warning: As the sequence lengths vary, currently we do not support batch size > 1
-# We will have to take care of it with padding (via a collate function for the DataLoader or similar)
-# See:
-# - https://www.codefull.net/2018/11/use-pytorchs-dataloader-with-variable-length-sequences-for-lstm-gru/
-# - https://discuss.pytorch.org/t/how-to-create-a-dataloader-with-variable-size-input/8278/13
+from amml_utils.utils import version_check
 
 DATASET_NAME = "Simulated_Bloch"
+DATASET_DESCRIPTION = "Simulated Bloch dataset using BART"
+DATASET_VERSION = "v1.1"
+DATASET_VERSION_FILE = "version.txt"
+
 
 def standard_transform(trajectory):
     return trajectory
+
 
 class CustomDataset(torch.utils.data.Dataset):
     """Custom dataset that can be used for loading image data from files.
@@ -31,6 +32,7 @@ class CustomDataset(torch.utils.data.Dataset):
     subset
         Either "full", "train", "test" or "val".
     """
+
     def __init__(self, data_path, subset, transform=standard_transform):
         if subset == "full":
             folder_names = ["train", "test", "val"]
@@ -51,7 +53,8 @@ class CustomDataset(torch.utils.data.Dataset):
         return len(self.data_paths)
 
     # Indices of the magnetization
-    LABEL_INDICES = range(4, 7)
+    FEATURES_LENGTH = 7
+    LABELS_LENGTH = 3
 
     def __getitem__(self, idx):
         # Load the parquet file and convert data to numpy array
@@ -63,11 +66,13 @@ class CustomDataset(torch.utils.data.Dataset):
             datapoint = self.transform(datapoint)
 
             # Separate features and labels
-        features = np.delete(datapoint, self.LABEL_INDICES, axis=1)
-        labels = datapoint[:, self.LABEL_INDICES]
+        features = datapoint[:, :self.FEATURES_LENGTH]
+        labels = datapoint[:, self.FEATURES_LENGTH:]
 
         # Convert numpy arrays to PyTorch tensors
         return torch.from_numpy(features), torch.from_numpy(labels)
 
 
-register_dataset(DATASET_NAME, None, CustomDataset)
+register_dataset(DATASET_NAME, CustomDataset, description=DATASET_DESCRIPTION,
+                 version_check_function=lambda path: version_check(path, DATASET_NAME, DATASET_VERSION,
+                                                                   DATASET_VERSION_FILE))

@@ -68,4 +68,4 @@ class CustomDataset(torch.utils.data.Dataset):
         return image
 
 
-register_dataset(DATASET_NAME, download_dataset, CustomDataset)
+register_dataset(DATASET_NAME, CustomDataset, download_function=download_dataset)
