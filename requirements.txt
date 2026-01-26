@@ -2,5 +2,5 @@ imageio==2.37.2
 nc_py_api==0.23.1
 requests==2.32.5
 torch==2.9.1
-torchvision==0.24.1
+torchvision==0.25.0
 fastparquet==2025.12.0
