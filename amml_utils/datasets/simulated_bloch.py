@@ -53,24 +53,19 @@ class CustomDataset(torch.utils.data.Dataset):
         return len(self.data_paths)
 
     # Indices of the magnetization
-    FEATURES_LENGTH = 7
-    LABELS_LENGTH = 3
+    FEATURES = ['t', 'B_x', 'B_y', 'B_z', 'R1', 'R2', 'M0']
+    LABELS = ['M_x', 'M_y', 'M_z']
 
     def __getitem__(self, idx):
         # Load the parquet file and convert data to numpy array
         data_df = pd.read_parquet(self.data_paths[idx]).astype(np.float32)
-        datapoint = data_df.to_numpy()
 
         # Apply transformation if specified
         if self.transform:
-            datapoint = self.transform(datapoint)
+            data_df = self.transform(data_df)
 
-            # Separate features and labels
-        features = datapoint[:, :self.FEATURES_LENGTH]
-        labels = datapoint[:, self.FEATURES_LENGTH:]
-
-        # Convert numpy arrays to PyTorch tensors
-        return torch.from_numpy(features), torch.from_numpy(labels)
+        # Separate features and labels, and convert numpy arrays to PyTorch tensors
+        return torch.from_numpy(data_df[self.FEATURES].values), torch.from_numpy(data_df[self.LABELS].values)
 
 
 register_dataset(DATASET_NAME, CustomDataset, description=DATASET_DESCRIPTION,
