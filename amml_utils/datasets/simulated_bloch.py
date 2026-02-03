@@ -33,6 +33,9 @@ class CustomDataset(torch.utils.data.Dataset):
         Either "full", "train", "test" or "val".
     """
 
+    def get_data_dirname(self):
+        return DATASET_NAME
+
     def __init__(self, data_path, subset, transform=standard_transform):
         if subset == "full":
             folder_names = ["train", "test", "val"]
@@ -41,7 +44,7 @@ class CustomDataset(torch.utils.data.Dataset):
         self.data_paths = []
 
         for name in folder_names:
-            path = pathlib.Path(os.path.join(data_path, DATASET_NAME, name))
+            path = pathlib.Path(os.path.join(data_path, self.get_data_dirname(), name))
             for file_path in path.iterdir():
                 if not file_path.as_uri().endswith(".parquet"):
                     continue

@@ -7,6 +7,7 @@ import torch
 from amml_utils.datasets.simulated_bloch import CustomDataset
 from amml_utils.utils import version_check
 from amml_utils.registry import register_dataset
+from amml_utils.datasets.simulated_bloch import CustomDataset as SimulatedBlochDataset
 
 # Format-equivalent version of Simulated_Bloch dataset (therefore re-uses that code)
 
@@ -17,6 +18,12 @@ DATASET_VERSION_FILE = "version.txt"
 
 def standard_transform(trajectory):
     return trajectory
+
+
+class CustomDataset(SimulatedBlochDataset):
+    def get_data_dirname(self):
+        return DATASET_NAME
+
 
 register_dataset(DATASET_NAME, CustomDataset, description=DATASET_DESCRIPTION,
                  version_check_function=lambda path: version_check(path, DATASET_NAME, DATASET_VERSION,
