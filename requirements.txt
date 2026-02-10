@@ -1,5 +1,5 @@
 imageio==2.37.2
-nc_py_api==0.23.1
+nc_py_api==0.24.0
 requests==2.32.5
 torch==2.10.0
 torchvision==0.25.0
