@@ -13,7 +13,7 @@ from amml_utils.datasets.simulated_bloch import CustomDataset as SimulatedBlochD
 
 DATASET_NAME = "RNN_Simulated_Bloch"
 DATASET_DESCRIPTION = "Simulated Bloch dataset using IntegratorRNN"
-DATASET_VERSION = "v1.2"
+DATASET_VERSION = "v1.3"
 DATASET_VERSION_FILE = "version.txt"
 
 def standard_transform(trajectory):

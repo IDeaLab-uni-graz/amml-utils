@@ -10,7 +10,7 @@ from amml_utils.utils import version_check
 
 DATASET_NAME = "Simulated_Bloch"
 DATASET_DESCRIPTION = "Simulated Bloch dataset using BART"
-DATASET_VERSION = "v1.1"
+DATASET_VERSION = "v1.2"
 DATASET_VERSION_FILE = "version.txt"
 
 
