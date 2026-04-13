@@ -61,7 +61,7 @@ class CustomDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         # Load the parquet file and convert data to numpy array
-        data_df = pd.read_parquet(self.data_paths[idx]).astype(np.float32)
+        data_df = pd.read_parquet(self.data_paths[idx]).astype(np.float64)
 
         # Apply transformation if specified
         if self.transform:
