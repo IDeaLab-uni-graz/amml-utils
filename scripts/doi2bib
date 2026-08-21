@@ -1,0 +1,549 @@
+#!/usr/bin/env python3
+"""Turn a DOI into a BibTeX entry formatted for my papers.
+
+Fetches BibTeX from doi.org (content negotiation) and rewrites it:
+  * month / issn / isbn / url dropped, doi kept
+  * page ranges joined with "--"
+  * authors as "Lastname, Firstname and ..."
+  * title capitalization protected with an extra pair of braces
+  * citation key "lastname1YEARfirstwordoftitle"
+The entry is printed and (unless --no-copy) put on the X clipboard.
+"""
+
+import argparse
+import html
+import re
+import shutil
+import subprocess
+import sys
+import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
+
+# Fields never wanted in the entry. Override per call with --keep / --drop.
+DROP_DEFAULT = {"month", "issn", "isbn", "url", "abstract", "keywords", "copyright"}
+
+# Order fields are emitted in; anything unknown is appended, doi always last.
+FIELD_ORDER = [
+    "author", "editor", "title", "booktitle", "journal", "series",
+    "school", "institution", "organization", "howpublished",
+    "volume", "number", "pages", "publisher", "address",
+    "edition", "chapter", "year", "note",
+]
+
+BRACE_TITLE_FIELDS = {"title", "booktitle"}
+
+# Note added to arXiv preprints, which otherwise cite as a bare author/title/year
+# ('plain.bst' prints nothing else for @misc -- not even publisher = {arXiv}).
+# "{id}" is the arXiv identifier, "{class}" the primary subject class.
+# Alternatives: "Preprint, arXiv:{id}" / "arXiv preprint arXiv:{id} [{class}]"
+ARXIV_NOTE = "arXiv preprint arXiv:{id}"
+
+# Lowercase name particles that belong to the surname ("van der Waals").
+PARTICLES = {
+    "van", "von", "de", "der", "den", "del", "della", "di", "da", "das",
+    "dos", "du", "la", "le", "les", "ter", "ten", "af", "av", "zu", "zum",
+    "bin", "ibn", "al", "el", "y", "e", "of", "op", "'t", "in",
+}
+SUFFIXES = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "phd", "ph.d."}
+
+
+# --------------------------------------------------------------------------- #
+# fetching
+# --------------------------------------------------------------------------- #
+
+def normalize_doi(raw):
+    doi = raw.strip().strip("<>").rstrip(".,;")
+    doi = re.sub(r"(?i)^\s*(doi:\s*|https?://(dx\.)?doi\.org/|https?://doi\.org/)", "", doi)
+    if not doi.startswith("10."):
+        raise ValueError(f"does not look like a DOI: {raw!r}")
+    return doi
+
+
+def fetch_bibtex(doi, timeout=25):
+    req = urllib.request.Request(
+        "https://doi.org/" + urllib.parse.quote(doi, safe="/:()<>[]#-._;"),
+        headers={
+            "Accept": "application/x-bibtex; charset=utf-8",
+            "User-Agent": "doi2bib-local/1.0 (python-urllib)",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise RuntimeError(f"DOI not found: {doi}") from None
+        raise RuntimeError(f"HTTP {exc.code} for {doi}: {exc.reason}") from None
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"could not reach doi.org: {exc.reason}") from None
+
+
+# --------------------------------------------------------------------------- #
+# parsing
+# --------------------------------------------------------------------------- #
+
+def parse_entry(text):
+    """Return (entrytype, [(field, value), ...]) from one BibTeX entry."""
+    text = text.strip().lstrip("\ufeff")
+    m = re.search(r"@(\w+)\s*\{", text)
+    if not m:
+        raise RuntimeError("no BibTeX entry in the reply:\n" + text[:400])
+    etype = m.group(1).lower()
+
+    # body = everything inside the outermost braces of the entry
+    start = m.end()
+    depth = 1
+    i = start
+    while i < len(text) and depth:
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+        i += 1
+    body = text[start:i - 1]
+
+    # skip the original citation key
+    comma = split_top_level(body, first_only=True)
+    fields = []
+    for chunk in split_top_level(comma[1] if len(comma) > 1 else ""):
+        if "=" not in chunk:
+            continue
+        name, _, value = chunk.partition("=")
+        fields.append((name.strip().lower(), strip_delims(value.strip())))
+    return etype, fields
+
+
+def split_top_level(s, first_only=False):
+    """Split on commas that are outside braces and quotes."""
+    parts, depth, quoted, buf = [], 0, False, []
+    for ch in s:
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        elif ch == '"' and depth == 0:
+            quoted = not quoted
+        if ch == "," and depth == 0 and not quoted:
+            parts.append("".join(buf))
+            buf = []
+            if first_only:
+                parts.append(s[len("".join(parts)) + 1:])
+                return parts
+            continue
+        buf.append(ch)
+    parts.append("".join(buf))
+    return [p for p in (x.strip() for x in parts) if p]
+
+
+def strip_delims(value):
+    value = value.strip().rstrip(",").strip()
+    while len(value) >= 2 and ((value[0] == "{" and value[-1] == "}")
+                               or (value[0] == '"' and value[-1] == '"')):
+        inner = value[1:-1]
+        if not balanced(inner):
+            break
+        value = inner.strip()
+    return " ".join(value.split())
+
+
+def balanced(s):
+    depth = 0
+    for ch in s:
+        depth += (ch == "{") - (ch == "}")
+        if depth < 0:
+            return False
+    return depth == 0
+
+
+# --------------------------------------------------------------------------- #
+# rewriting
+# --------------------------------------------------------------------------- #
+
+# Characters Crossref happily ships but LaTeX chokes on.
+UNICODE_MAP = {
+    "\u00a0": " ", "\u2007": " ", "\u2008": " ", "\u2009": " ", "\u200a": " ",
+    "\u202f": " ", "\u200b": "", "\ufeff": "",
+    "\u2010": "-", "\u2011": "-", "\u2012": "--", "\u2013": "--",
+    "\u2014": "---", "\u2015": "---", "\u2212": "-",
+    "\u2018": "`", "\u2019": "'", "\u201a": ",", "\u201c": "``",
+    "\u201d": "''", "\u2032": "'", "\u2033": "''",
+    "\u2026": "\\dots{}",
+}
+
+# Markup Crossref/JATS actually uses. A whitelist, not "<...>": titles contain
+# real comparisons ("Re < 100 and Re > 1000") that a generic pattern eats.
+TAG_NAMES = (r"(?:i|em|b|strong|u|tt|sc|scp|small-caps|sub|sup|sups|inf|italic"
+             r"|bold|underline|monospace|roman|sans-serif|serif|p|br|span|div"
+             r"|alt-title|named-content|styled-content|xref|ext-link|fn|label"
+             r"|inline-formula|disp-formula|(?:mml|xhtml|jats):[A-Za-z-]+)")
+
+# LaTeX text-mode specials. Unescaped, "<" and ">" render as inverted
+# punctuation, "^" and "~" as errors or a silent non-breaking space.
+TEXT_ESCAPES = {
+    "&": r"\&", "%": r"\%", "#": r"\#", "_": r"\_",
+    "<": "$<$", ">": "$>$", "~": r"$\sim$", "^": r"\^{}",
+}
+
+
+def sanitize(value):
+    """Undo Crossref's HTML and make the value safe to paste into LaTeX."""
+    v = html.unescape(value)
+    v = re.sub(r"(?is)<(sub|inf)>(.*?)</\1>", r"$_{\2}$", v)
+    v = re.sub(r"(?is)<(sup|sups)>(.*?)</\1>", r"$^{\2}$", v)
+    v = re.sub(r"(?is)<(i|em)>(.*?)</\1>", r"\\emph{\2}", v)
+    v = re.sub(r"(?is)<(b|strong)>(.*?)</\1>", r"\\textbf{\2}", v)
+    v = re.sub(rf"(?is)</?{TAG_NAMES}(?:\s[^<>]*?)?/?>", "", v)   # leftover tags
+    for bad, good in UNICODE_MAP.items():
+        v = v.replace(bad, good)
+    # escape LaTeX specials, but never inside $...$ math
+    parts = re.split(r"(\$[^$]*\$)", v)
+    for i, part in enumerate(parts):
+        if not part.startswith("$"):
+            parts[i] = re.sub(r"(?<!\\)([&%#_<>~^])",
+                              lambda mo: TEXT_ESCAPES[mo.group(1)], part)
+    return " ".join("".join(parts).split())
+
+
+def split_names(value):
+    """Split an author/editor field on top-level ' and '."""
+    names, depth, buf = [], 0, []
+    flat = value
+    i = 0
+    while i < len(flat):
+        ch = flat[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        if depth == 0 and flat[i:i + 5].lower() == " and " :
+            names.append("".join(buf))
+            buf = []
+            i += 5
+            continue
+        buf.append(ch)
+        i += 1
+    names.append("".join(buf))
+    return [n.strip() for n in names if n.strip()]
+
+
+def reformat_name(name):
+    """Return 'Lastname, Firstname' for one name."""
+    name = name.strip()
+    if "," in name and balanced(name.split(",")[0]):
+        # already Lastname, Firstname -- just tidy whitespace
+        head, _, tail = name.partition(",")
+        return f"{head.strip()}, {tail.strip()}" if tail.strip() else head.strip()
+    if name.startswith("{") and name.endswith("}") and balanced(name[1:-1]):
+        return name  # corporate author, leave alone
+
+    tokens = brace_aware_split(name)
+    if len(tokens) < 2:
+        return name
+
+    suffix = ""
+    if tokens[-1].lower().strip(".") in {s.strip(".") for s in SUFFIXES} and len(tokens) > 2:
+        suffix = tokens.pop()
+
+    # find start of the surname: first lowercase particle after a given name
+    idx = len(tokens) - 1
+    for j in range(1, len(tokens) - 1):
+        bare = tokens[j].lstrip("{").rstrip("}")
+        if bare.lower() in PARTICLES and bare[:1].islower():
+            idx = j
+            break
+    last = " ".join(tokens[idx:])
+    first = " ".join(tokens[:idx])
+    out = f"{last}, {suffix + ', ' if suffix else ''}{first}"
+    return out.strip().rstrip(",")
+
+
+def brace_aware_split(s):
+    tokens, depth, buf = [], 0, []
+    for ch in s:
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        if ch.isspace() and depth == 0:
+            if buf:
+                tokens.append("".join(buf))
+                buf = []
+            continue
+        buf.append(ch)
+    if buf:
+        tokens.append("".join(buf))
+    return tokens
+
+
+def fix_pages(value):
+    v = value.strip()
+    v = v.replace("\u2013", "-").replace("\u2014", "-").replace("\u2212", "-")
+    v = re.sub(r"\s*-+\s*", "--", v)
+    return v
+
+
+def protect_title(value):
+    v = value.strip()
+    if v.startswith("{") and v.endswith("}") and balanced(v[1:-1]):
+        return v          # already double-braced by the publisher
+    return "{" + v + "}"
+
+
+# Letters NFKD does not decompose, needed for the citation key.
+TRANSLIT = str.maketrans({
+    "\u00d8": "O", "\u00f8": "o", "\u00c6": "AE", "\u00e6": "ae",
+    "\u0152": "OE", "\u0153": "oe", "\u00df": "ss", "\u1e9e": "SS",
+    "\u00d0": "D", "\u00f0": "d", "\u0110": "D", "\u0111": "d",
+    "\u00de": "Th", "\u00fe": "th", "\u0141": "L", "\u0142": "l",
+    "\u0126": "H", "\u0127": "h", "\u0131": "i", "\u0130": "I",
+    "\u014a": "Ng", "\u014b": "ng", "\u00d1": "N", "\u00f1": "n",
+})
+
+
+def ascii_fold(s):
+    s = re.sub(r"\\[a-zA-Z]+\s*", "", s)          # \"o, \ss, ...
+    s = re.sub(r"[{}$\\\"']", "", s)
+    s = s.translate(TRANSLIT)
+    s = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in s if not unicodedata.combining(c))
+
+
+# Leading function words skipped when picking the title word for the key,
+# so "A robust ..." keys on "robust" and "On the Convergence ..." on
+# "convergence". Includes German/Romance ones for non-English titles.
+KEY_STOPWORDS = {
+    # English determiners
+    "a", "an", "the", "this", "that", "these", "those", "some", "any",
+    "all", "both", "each", "its", "it", "their", "our", "his", "her",
+    # English prepositions / conjunctions / copula
+    "of", "on", "in", "at", "to", "for", "from", "with", "within",
+    "without", "by", "into", "onto", "over", "under", "via", "across",
+    "after", "before", "during", "between", "among", "against", "about",
+    "upon", "toward", "towards", "through", "throughout", "per",
+    "and", "or", "but", "nor", "so", "as", "than",
+    "is", "are", "was", "were", "be", "being", "been", "am",
+    # English interrogatives, auxiliaries and pronouns
+    "how", "what", "why", "when", "where", "which", "who", "whom",
+    "whose", "whether", "do", "does", "did", "can", "could", "shall",
+    "should", "will", "would", "may", "might", "must", "have", "has",
+    "had", "i", "we", "you", "they", "he", "she", "us", "them", "me",
+    "my", "your",
+    # German
+    "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen",
+    "einem", "einer", "eines", "und", "oder", "von", "vom", "zu", "zur",
+    "zum", "im", "auf", "mit", "fur", "aus", "bei", "uber", "unter",
+    "ohne", "als", "sind", "sein", "nach", "vor", "durch", "gegen", "um",
+    "an", "am", "beim", "einige", "wie", "was", "warum", "wann", "wo",
+    "wieso", "weshalb", "welche", "welcher", "welches", "wer", "ob",
+    "kann", "konnen", "sollte", "soll", "muss", "hat", "haben", "wir",
+    "ich", "man",
+    # French / Spanish / Italian
+    "la", "le", "les", "un", "une", "des", "du", "de", "el", "los", "las",
+    "il", "lo", "gli", "dei", "della", "dell", "sur", "pour", "avec",
+    "et", "y", "e", "en", "con", "para", "por", "sobre", "nel", "nella",
+    "comment", "pourquoi", "quand", "quel", "quelle", "que", "qui",
+    "quoi", "como", "porque", "cuando", "donde", "cual", "quien",
+}
+
+
+def make_key(fields):
+    authors = dict(fields).get("author") or dict(fields).get("editor") or ""
+    first = split_names(authors)[0] if authors else ""
+    lastname = first.split(",")[0] if "," in first else (
+        brace_aware_split(first)[-1] if first else "anon")
+    lastname = re.sub(r"[^a-z]", "", ascii_fold(lastname).lower()) or "anon"
+
+    year = dict(fields).get("year", "")
+    year = (re.search(r"\d{4}", year).group(0) if re.search(r"\d{4}", year) else "")
+
+    title = dict(fields).get("title", "")
+    title = re.sub(r"\$[^$]*\$", " ", title)      # drop inline math
+    words = [re.sub(r"[^a-z0-9]", "", w.lower())
+             for w in re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*", ascii_fold(title))]
+    words = [w for w in words if w]
+    word = next((w for w in words if w not in KEY_STOPWORDS),
+                words[0] if words else "untitled")
+
+    return f"{lastname}{year}{word}"
+
+
+def build_entry(etype, fields, drop):
+    out = []
+    booklike = etype in ("book", "inbook", "booklet", "proceedings")
+    for name, value in fields:
+        if name in drop:
+            continue
+        if name not in ("doi", "url", "eprint"):
+            value = sanitize(value)
+        if name == "journal" and booklike:
+            name = "series"        # Crossref puts the series in 'journal' for books
+        if name in ("author", "editor"):
+            value = " and ".join(reformat_name(n) for n in split_names(value))
+        elif name == "pages":
+            value = fix_pages(value)
+        elif name in BRACE_TITLE_FIELDS:
+            value = protect_title(value)
+        out.append((name, value))
+
+    def rank(item):
+        name = item[0]
+        if name == "doi":
+            return (2, 0)
+        if name in FIELD_ORDER:
+            return (0, FIELD_ORDER.index(name))
+        return (1, 0)
+
+    # some publishers duplicate 'series' into the non-standard 'collection'
+    have = dict(out)
+    if have.get("collection") and have.get("collection") == have.get("series"):
+        out = [(n, v) for n, v in out if n != "collection"]
+
+    out.sort(key=rank)
+    width = max((len(n) for n, _ in out), default=0)
+    # key from the cleaned fields, so leftover markup ("<tt>BLAT</tt>") cannot
+    # leak into it and authors are already in "Lastname, Firstname" form
+    lines = [f"@{etype}{{{make_key(out)},"]
+    for name, value in out:
+        lines.append(f"  {name.ljust(width)} = {{{value}}},")
+    if len(lines) > 1:
+        lines[-1] = lines[-1].rstrip(",")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def arxiv_id(doi, fields):
+    """arXiv identifier for a preprint, else None.
+
+    Prefer the url field ("https://arxiv.org/abs/math/0211159") -- DataCite
+    upper-cases the DOI, so its suffix has the wrong case for old-style ids.
+    """
+    have = dict(fields)
+    m = re.search(r"(?i)arxiv\.org/(?:abs|pdf)/([^\s{}\"]+)", have.get("url", ""))
+    if m:
+        return m.group(1).removesuffix(".pdf")
+    m = re.match(r"(?i)^10\.48550/arxiv\.(.+)$", doi)
+    if m:
+        ident = m.group(1)
+        if "/" in ident:                     # old style: MATH/0211159
+            archive, _, number = ident.partition("/")
+            return f"{archive.lower()}/{number}"
+        return ident
+    if have.get("eprint") and "arxiv" in have.get("archiveprefix", "arxiv").lower():
+        return have["eprint"]
+    return None
+
+
+def arxiv_class(fields):
+    """Primary subject class ("cs.CL") from the keywords field, if present."""
+    m = re.search(r"\(([a-z-]{2,}(?:\.[A-Za-z-]{2,})?)\)", dict(fields).get("keywords", ""))
+    return m.group(1) if m else None
+
+
+def add_preprint_note(doi, fields):
+    """Append note = {arXiv preprint arXiv:...} to arXiv entries."""
+    if any(n == "note" for n, _ in fields):
+        return fields                        # never clobber an existing note
+    have = dict(fields)
+    looks_arxiv = (doi.lower().startswith("10.48550/")
+                   or "arxiv" in have.get("publisher", "").lower()
+                   or "arxiv" in have.get("journal", "").lower())
+    if not looks_arxiv:
+        return fields
+    ident, klass = arxiv_id(doi, fields), arxiv_class(fields)
+    if not ident:
+        return fields + [("note", "Preprint")]
+    note = ARXIV_NOTE
+    if not klass:
+        note = re.sub(r"\s*\[\{class\}\]", "", note)
+    return fields + [("note", note.format(**{"id": ident, "class": klass or ""}))]
+
+
+def convert(doi_raw, drop, keep_doi_case=True):
+    doi = normalize_doi(doi_raw)
+    etype, fields = parse_entry(fetch_bibtex(doi))
+    fields = add_preprint_note(doi, fields)
+    if keep_doi_case:
+        # Crossref sometimes lowercases the suffix; trust what the user typed.
+        fields = [(n, doi if n == "doi" and v.lower() == doi.lower() else v)
+                  for n, v in fields]
+    if not any(n == "doi" for n, _ in fields):
+        fields.append(("doi", doi))
+    return build_entry(etype, fields, drop)
+
+
+def copy_to_clipboard(text):
+    if shutil.which("wl-copy"):
+        cmds = [["wl-copy"]]
+    elif shutil.which("xclip"):
+        cmds = [["xclip", "-selection", "clipboard"], ["xclip", "-selection", "primary"]]
+    elif shutil.which("xsel"):
+        cmds = [["xsel", "--clipboard", "--input"]]
+    elif shutil.which("pbcopy"):
+        cmds = [["pbcopy"]]
+    else:
+        return False
+    ok = False
+    for cmd in cmds:
+        try:
+            subprocess.run(cmd, input=text.encode(), check=True)
+            ok = True
+        except (OSError, subprocess.CalledProcessError):
+            pass
+    return ok
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(
+        description="DOI -> BibTeX entry in my house format (copied to the clipboard).")
+    p.add_argument("doi", nargs="*", help="one or more DOIs (bare, doi:..., or https://doi.org/...); '-' reads stdin")
+    p.add_argument("-n", "--no-copy", action="store_true", help="do not touch the clipboard")
+    p.add_argument("--drop", metavar="FIELD", action="append", default=[],
+                   help="also drop this field (repeatable)")
+    p.add_argument("--keep", metavar="FIELD", action="append", default=[],
+                   help="keep a field that is dropped by default (repeatable)")
+    p.add_argument("--raw", action="store_true", help="print the unmodified BibTeX from doi.org")
+    args = p.parse_args(argv)
+
+    dois = []
+    for d in args.doi:
+        dois.extend(sys.stdin.read().split() if d == "-" else [d])
+    if not dois:
+        if sys.stdin.isatty():
+            p.error("no DOI given")
+        dois = sys.stdin.read().split()
+
+    drop = (DROP_DEFAULT | {f.lower() for f in args.drop}) - {f.lower() for f in args.keep}
+
+    entries, failures, seen = [], 0, {}
+    for d in dois:
+        try:
+            if args.raw:
+                entries.append(fetch_bibtex(normalize_doi(d)).strip())
+                continue
+            entry = convert(d, drop)
+            key = entry.split("{", 1)[1].split(",", 1)[0]
+            seen[key] = seen.get(key, 0) + 1
+            if seen[key] > 1:                     # disambiguate duplicate keys
+                suffix = chr(ord("a") + seen[key] - 2)
+                entry = entry.replace(key + ",", key + suffix + ",", 1)
+            entries.append(entry)
+        except (ValueError, RuntimeError) as exc:
+            print(f"doi2bib: {exc}", file=sys.stderr)
+            failures += 1
+
+    if not entries:
+        return 1
+    text = "\n\n".join(entries)
+    print(text)
+    if not args.no_copy:
+        if copy_to_clipboard(text):
+            print("[copied to clipboard]", file=sys.stderr)
+        else:
+            print("doi2bib: no clipboard tool found (install xclip / wl-clipboard)", file=sys.stderr)
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
