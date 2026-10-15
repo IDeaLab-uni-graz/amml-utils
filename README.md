@@ -158,3 +158,75 @@ See also [example.py](amml_utils/datasets/example.py) for an example using a dat
 
 - Add to all docker images
 - Add templates in amml-python-template and amml-python-ml-template that load one of the datasets and show a basic example, e.g, training something small
+
+## Command line scripts
+
+Standalone command line scripts are collected in the [scripts](scripts) directory. They are deliberately **not** part
+of the `amml_utils` Python package: they only require a Python 3.9+ interpreter and none of the dependencies listed in
+[requirements.txt](requirements.txt), so they can be used without installing the package.
+
+### doi2bib
+
+[scripts/doi2bib](scripts/doi2bib) creates a BibTeX entry for a given DOI in the format we use in our papers and
+copies it to the clipboard. It fetches the entry from [doi.org](https://www.doi.org) via content negotiation and,
+in contrast to [doi2bib.org](https://www.doi2bib.org), post-processes it such that
+
+- the fields `month`, `issn`, `isbn`, `url`, `abstract`, `keywords` and `copyright` are removed (the `doi` is kept,
+  which makes the `url` redundant),
+- page ranges are separated by two dashes, i.e. `pages = {981--996}`,
+- authors are written as `Lastname1, Firstname1 and Lastname2, Firstname2 and ...`,
+- the capitalization of titles is preserved using an additional pair of braces,
+- the citation key is of the form `lastname1YEARfirstwordoftitle`, where leading articles, prepositions and question
+  words are skipped (`A robust and scalable ...` by Badia et al. thus gives `badia2021robust`),
+- arXiv preprints additionally get a `note = {arXiv preprint arXiv:1706.03762}`, since most bibliography styles
+  otherwise do not indicate at all that the reference is a preprint,
+- characters and markup that break LaTeX are escaped or replaced (`&`, `%`, `<`, `~`, non-ASCII dashes and quotes,
+  HTML tags such as `<sub>` or `<i>`, ...).
+
+#### Installation
+
+Copy or, preferably, symlink the script into a directory that is contained in your `PATH`:
+```shell
+ln -s $(pwd)/scripts/doi2bib ~/.local/bin/doi2bib
+```
+With a symlink the command is updated automatically whenever you pull the repository. To copy the entry to the
+clipboard, one of `xclip`/`xsel` (X11), `wl-clipboard` (Wayland) or `pbcopy` (macOS) has to be installed; otherwise
+the entry is only printed.
+
+#### Usage
+
+```shell
+doi2bib 10.1137/20M1364849
+```
+prints the entry and puts it on the clipboard, such that it can be pasted into a `.bib` file directly:
+```bibtex
+@article{kramer2021stability,
+  author    = {Kramer, Boris},
+  title     = {{Stability Domains for Quadratic-Bilinear Reduced-Order Models}},
+  journal   = {SIAM Journal on Applied Dynamical Systems},
+  volume    = {20},
+  number    = {2},
+  pages     = {981--996},
+  publisher = {Society for Industrial \& Applied Mathematics (SIAM)},
+  year      = {2021},
+  doi       = {10.1137/20M1364849}
+}
+```
+The DOI may also be passed as `doi:10.1137/20M1364849` or `https://doi.org/10.1137/20M1364849`. Several DOIs can be
+converted at once, and `-` reads the DOIs from standard input:
+```shell
+doi2bib 10.1137/20M1364849 10.1016/j.cma.2021.114093
+cat dois.txt | doi2bib -
+```
+The following options are available:
+
+| Option | Description |
+| --- | --- |
+| `-n`, `--no-copy` | only print the entry, do not touch the clipboard |
+| `--drop FIELD` | remove an additional field, e.g. `--drop publisher` |
+| `--keep FIELD` | keep a field that is removed by default, e.g. `--keep issn` |
+| `--raw` | print the unmodified entry as returned by doi.org |
+
+The defaults can be adjusted via the constants `DROP_DEFAULT` (fields to remove), `KEY_STOPWORDS` (words that are
+skipped when building the citation key) and `ARXIV_NOTE` (format of the note added to preprints) at the top of the
+script.
